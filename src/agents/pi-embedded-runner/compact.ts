@@ -296,6 +296,19 @@ export async function compactEmbeddedPiSessionDirect(
     const reason = error ?? `Unknown model: ${provider}/${modelId}`;
     return fail(reason);
   }
+  // Apply contextTokens cap to model so pi-coding-agent uses the effective
+  // context window for compaction thresholds, not the native value.
+  const ctxInfoCompact = resolveContextWindowInfo({
+    cfg: params.config,
+    provider,
+    modelId,
+    modelContextWindow: model.contextWindow,
+    defaultTokens: DEFAULT_CONTEXT_TOKENS,
+  });
+  const effectiveModel =
+    ctxInfoCompact.tokens < model.contextWindow
+      ? { ...model, contextWindow: ctxInfoCompact.tokens }
+      : model;
   try {
     const apiKeyInfo = await getApiKeyForModel({
       model,
@@ -569,7 +582,7 @@ export async function compactEmbeddedPiSessionDirect(
         sessionManager,
         provider,
         modelId,
-        model,
+        model: effectiveModel,
       });
       // Only create an explicit resource loader when there are extension factories
       // to register; otherwise let createAgentSession use its built-in default.
@@ -594,7 +607,7 @@ export async function compactEmbeddedPiSessionDirect(
         agentDir,
         authStorage,
         modelRegistry,
-        model,
+        model: effectiveModel,
         thinkingLevel: mapThinkingLevel(params.thinkLevel),
         tools: builtInTools,
         customTools,
