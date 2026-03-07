@@ -212,7 +212,15 @@ export function loadPluginManifestRegistry(params: {
         }
         const existingReal = safeRealpathSync(existing.candidate.rootDir, realpathCache);
         const candidateReal = safeRealpathSync(candidate.rootDir, realpathCache);
-        return Boolean(existingReal && candidateReal && existingReal === candidateReal);
+        // Only treat as same plugin if both realpath calls succeeded AND returned the same path.
+        // If either realpath fails (returns null), we can't determine equality - be conservative
+        // and suppress the warning to avoid false positives (especially on Windows with
+        // symlinks/junctions that realpath may not resolve correctly).
+        if (existingReal && candidateReal) {
+          return existingReal === candidateReal;
+        }
+        // Can't determine if realpath failed for either path - assume same to avoid false positive
+        return true;
       })();
       if (samePlugin) {
         // Prefer higher-precedence origins even if candidates are passed in
@@ -229,12 +237,17 @@ export function loadPluginManifestRegistry(params: {
         }
         continue;
       }
-      diagnostics.push({
-        level: "warn",
-        pluginId: manifest.id,
-        source: candidate.source,
-        message: `duplicate plugin id detected; later plugin may be overridden (${candidate.source})`,
-      });
+      // Only warn about duplicates when origins are the same (e.g., two global plugins).
+      // Different origins (e.g., bundled vs global) indicate intentional override
+      // where higher-precedence plugin is expected to replace lower-precedence one.
+      if (existing.candidate.origin === candidate.origin) {
+        diagnostics.push({
+          level: "warn",
+          pluginId: manifest.id,
+          source: candidate.source,
+          message: `duplicate plugin id detected; later plugin may be overridden (${candidate.source})`,
+        });
+      }
     } else {
       seenIds.set(manifest.id, { candidate, recordIndex: records.length });
     }
