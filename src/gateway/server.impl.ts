@@ -119,14 +119,10 @@ export { __resetModelCatalogCacheForTest } from "./server-model-catalog.js";
 
 ensureOpenClawCliOnPath();
 
-const DEFAULT_MEDIA_TTL_HOURS = 24;
 const MAX_MEDIA_TTL_HOURS = 24 * 7;
 
-function resolveMediaCleanupTtlMs(ttlHoursRaw: number | undefined): number {
-  const ttlHours = Math.min(
-    Math.max(ttlHoursRaw ?? DEFAULT_MEDIA_TTL_HOURS, 1),
-    MAX_MEDIA_TTL_HOURS,
-  );
+function resolveMediaCleanupTtlMs(ttlHoursRaw: number): number {
+  const ttlHours = Math.min(Math.max(ttlHoursRaw, 1), MAX_MEDIA_TTL_HOURS);
   const ttlMs = ttlHours * 60 * 60_000;
   if (!Number.isFinite(ttlMs) || !Number.isSafeInteger(ttlMs)) {
     throw new Error(`Invalid media.ttlHours: ${String(ttlHoursRaw)}`);
@@ -695,7 +691,7 @@ export async function startGatewayServer(
   let tickInterval = noopInterval();
   let healthInterval = noopInterval();
   let dedupeCleanup = noopInterval();
-  let mediaCleanup = noopInterval();
+  let mediaCleanup: ReturnType<typeof setInterval> | null = null;
   if (!minimalTestGateway) {
     ({ tickInterval, healthInterval, dedupeCleanup, mediaCleanup } = startGatewayMaintenanceTimers({
       broadcast,
@@ -712,7 +708,9 @@ export async function startGatewayServer(
       removeChatRun,
       agentRunSeq,
       nodeSendToSession,
-      mediaCleanupTtlMs: resolveMediaCleanupTtlMs(cfgAtStart.media?.ttlHours),
+      ...(typeof cfgAtStart.media?.ttlHours === "number"
+        ? { mediaCleanupTtlMs: resolveMediaCleanupTtlMs(cfgAtStart.media.ttlHours) }
+        : {}),
     }));
   }
 

@@ -17,6 +17,35 @@ describe("startGatewayMaintenanceTimers", () => {
     vi.clearAllMocks();
   });
 
+  it("does not schedule recursive media cleanup unless ttl is configured", async () => {
+    vi.useFakeTimers();
+    const { startGatewayMaintenanceTimers } = await import("./server-maintenance.js");
+
+    const timers = startGatewayMaintenanceTimers({
+      broadcast: () => {},
+      nodeSendToAllSubscribed: () => {},
+      getPresenceVersion: () => 1,
+      getHealthVersion: () => 1,
+      refreshGatewayHealthSnapshot: async () => ({ ok: true }) as HealthSummary,
+      logHealth: { error: () => {} },
+      dedupe: new Map(),
+      chatAbortControllers: new Map(),
+      chatRunState: { abortedRuns: new Map() },
+      chatRunBuffers: new Map(),
+      chatDeltaSentAt: new Map(),
+      removeChatRun: () => undefined,
+      agentRunSeq: new Map(),
+      nodeSendToSession: () => {},
+    });
+
+    expect(cleanOldMediaMock).not.toHaveBeenCalled();
+    expect(timers.mediaCleanup).toBeNull();
+
+    clearInterval(timers.tickInterval);
+    clearInterval(timers.healthInterval);
+    clearInterval(timers.dedupeCleanup);
+  });
+
   it("runs startup media cleanup and repeats it hourly", async () => {
     vi.useFakeTimers();
     const { startGatewayMaintenanceTimers } = await import("./server-maintenance.js");
@@ -54,7 +83,9 @@ describe("startGatewayMaintenanceTimers", () => {
     clearInterval(timers.tickInterval);
     clearInterval(timers.healthInterval);
     clearInterval(timers.dedupeCleanup);
-    clearInterval(timers.mediaCleanup);
+    if (timers.mediaCleanup) {
+      clearInterval(timers.mediaCleanup);
+    }
   });
 
   it("skips overlapping media cleanup runs", async () => {
@@ -104,6 +135,8 @@ describe("startGatewayMaintenanceTimers", () => {
     clearInterval(timers.tickInterval);
     clearInterval(timers.healthInterval);
     clearInterval(timers.dedupeCleanup);
-    clearInterval(timers.mediaCleanup);
+    if (timers.mediaCleanup) {
+      clearInterval(timers.mediaCleanup);
+    }
   });
 });

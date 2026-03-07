@@ -104,7 +104,7 @@ export type OpenClawConfig = {
   media?: {
     /** Preserve original uploaded filenames when storing inbound media. */
     preserveFilenames?: boolean;
-    /** Retention window for persisted inbound media cleanup. Default: 24. */
+    /** Optional retention window for persisted inbound media cleanup. */
     ttlHours?: number;
   };
   messages?: MessagesConfig;

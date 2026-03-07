@@ -427,7 +427,7 @@ export const FIELD_HELP: Record<string, string> = {
   "media.preserveFilenames":
     "When enabled, uploaded media keeps its original filename instead of a generated temp-safe name. Turn this on when downstream automations depend on stable names, and leave off to reduce accidental filename leakage.",
   "media.ttlHours":
-    "Retention window in hours for persisted inbound media cleanup across the full media tree. Keep the default 24 hours unless downstream workflows need a longer window before old media files are purged.",
+    "Optional retention window in hours for persisted inbound media cleanup across the full media tree. Leave unset to preserve legacy behavior, or set values like 24 (1 day) or 168 (7 days) when you want automatic cleanup.",
   audio:
     "Global audio ingestion settings used before higher-level tools process speech or media content. Configure this when you need deterministic transcription behavior for voice notes and clips.",
   "audio.transcription":

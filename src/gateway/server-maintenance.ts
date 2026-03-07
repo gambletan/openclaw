@@ -38,12 +38,12 @@ export function startGatewayMaintenanceTimers(params: {
   ) => ChatRunEntry | undefined;
   agentRunSeq: Map<string, number>;
   nodeSendToSession: (sessionKey: string, event: string, payload: unknown) => void;
-  mediaCleanupTtlMs: number;
+  mediaCleanupTtlMs?: number;
 }): {
   tickInterval: ReturnType<typeof setInterval>;
   healthInterval: ReturnType<typeof setInterval>;
   dedupeCleanup: ReturnType<typeof setInterval>;
-  mediaCleanup: ReturnType<typeof setInterval>;
+  mediaCleanup: ReturnType<typeof setInterval> | null;
 } {
   setBroadcastHealthUpdate((snap: HealthSummary) => {
     params.broadcast("health", snap, {
@@ -131,6 +131,10 @@ export function startGatewayMaintenanceTimers(params: {
       params.chatDeltaSentAt.delete(runId);
     }
   }, 60_000);
+
+  if (typeof params.mediaCleanupTtlMs !== "number") {
+    return { tickInterval, healthInterval, dedupeCleanup, mediaCleanup: null };
+  }
 
   let mediaCleanupInFlight: Promise<void> | null = null;
   const runMediaCleanup = () => {
