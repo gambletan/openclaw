@@ -85,6 +85,32 @@ export type ChatProps = {
 const COMPACTION_TOAST_DURATION_MS = 5000;
 const FALLBACK_TOAST_DURATION_MS = 8000;
 
+// Available slash commands for autocomplete
+export type SlashCommand = {
+  name: string;
+  description: string;
+  usage: string;
+};
+
+export const SLASH_COMMANDS: SlashCommand[] = [
+  { name: "/help", description: "Show available commands", usage: "/help" },
+  { name: "/status", description: "Show gateway and session status", usage: "/status" },
+  { name: "/new", description: "Start a new chat session", usage: "/new" },
+  { name: "/reset", description: "Reset the current context", usage: "/reset" },
+  { name: "/stop", description: "Stop the current operation", usage: "/stop" },
+  { name: "/model", description: "Switch the current model", usage: "/model <provider/model>" },
+];
+
+function getMatchingCommands(input: string): SlashCommand[] {
+  if (!input.startsWith("/")) {
+    return [];
+  }
+  const query = input.toLowerCase();
+  return SLASH_COMMANDS.filter(
+    (cmd) => cmd.name.toLowerCase().includes(query) || cmd.description.toLowerCase().includes(query),
+  ).slice(0, 6);
+}
+
 function adjustTextareaHeight(el: HTMLTextAreaElement) {
   el.style.height = "auto";
   el.style.height = `${el.scrollHeight}px`;
@@ -431,21 +457,25 @@ export function renderChat(props: ChatProps) {
               dir=${detectTextDirection(props.draft)}
               ?disabled=${!props.connected}
               @keydown=${(e: KeyboardEvent) => {
-                if (e.key !== "Enter") {
+                // Handle slash command autocomplete navigation
+                if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Tab") {
+                  // Let the autocomplete dropdown handle these
                   return;
                 }
-                if (e.isComposing || e.keyCode === 229) {
-                  return;
-                }
-                if (e.shiftKey) {
-                  return;
-                } // Allow Shift+Enter for line breaks
-                if (!props.connected) {
-                  return;
-                }
-                e.preventDefault();
-                if (canCompose) {
-                  props.onSend();
+                if (e.key === "Enter") {
+                  if (e.isComposing || e.keyCode === 229) {
+                    return;
+                  }
+                  if (e.shiftKey) {
+                    return;
+                  } // Allow Shift+Enter for line breaks
+                  if (!props.connected) {
+                    return;
+                  }
+                  e.preventDefault();
+                  if (canCompose) {
+                    props.onSend();
+                  }
                 }
               }}
               @input=${(e: Event) => {
@@ -457,6 +487,30 @@ export function renderChat(props: ChatProps) {
               placeholder=${composePlaceholder}
             ></textarea>
           </label>
+          ${
+            props.draft.startsWith("/") && props.connected
+              ? html`
+                  <div class="chat-autocomplete">
+                    <div class="chat-autocomplete__list">
+                      ${getMatchingCommands(props.draft).map(
+                        (cmd, idx) => html`
+                          <button
+                            type="button"
+                            class="chat-autocomplete__item"
+                            @click=${() => {
+                              props.onDraftChange(cmd.usage + " ");
+                            }}
+                          >
+                            <span class="chat-autocomplete__name">${cmd.name}</span>
+                            <span class="chat-autocomplete__desc">${cmd.description}</span>
+                          </button>
+                        `,
+                      )}
+                    </div>
+                  </div>
+                `
+              : nothing
+          }
           <div class="chat-compose__actions">
             <button
               class="btn"

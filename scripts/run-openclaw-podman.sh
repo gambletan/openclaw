@@ -77,6 +77,15 @@ HOST_GATEWAY_PORT="${OPENCLAW_PODMAN_GATEWAY_HOST_PORT:-${OPENCLAW_GATEWAY_PORT:
 HOST_BRIDGE_PORT="${OPENCLAW_PODMAN_BRIDGE_HOST_PORT:-${OPENCLAW_BRIDGE_PORT:-18790}}"
 # Keep Podman default local-only unless explicitly overridden.
 # Non-loopback binds require gateway.controlUi.allowedOrigins (security hardening).
+
+# Source .env file BEFORE evaluating GATEWAY_BIND so user settings take effect
+if [[ -f "$ENV_FILE" ]]; then
+  set -a
+  # shellcheck source=/dev/null
+  source "$ENV_FILE" 2>/dev/null || true
+  set +a
+fi
+
 GATEWAY_BIND="${OPENCLAW_GATEWAY_BIND:-loopback}"
 
 # Safe cwd for podman (openclaw is nologin; avoid inherited cwd from sudo)
@@ -92,13 +101,6 @@ mkdir -p "$CONFIG_DIR" "$WORKSPACE_DIR"
 # Subdirs the app may create at runtime (canvas, cron); create here so ownership is correct
 mkdir -p "$CONFIG_DIR/canvas" "$CONFIG_DIR/cron"
 chmod 700 "$CONFIG_DIR" "$WORKSPACE_DIR" 2>/dev/null || true
-
-if [[ -f "$ENV_FILE" ]]; then
-  set -a
-  # shellcheck source=/dev/null
-  source "$ENV_FILE" 2>/dev/null || true
-  set +a
-fi
 
 upsert_env_var() {
   local file="$1"
