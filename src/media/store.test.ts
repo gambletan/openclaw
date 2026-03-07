@@ -133,14 +133,79 @@ describe("media store", () => {
       await fs.utimes(oldNested.path, past / 1000, past / 1000);
       await fs.utimes(oldFlat.path, past / 1000, past / 1000);
 
-      await store.cleanOldMedia(1_000);
+      await store.cleanOldMedia(1_000, { recursive: true, pruneEmptyDirs: true });
 
       await expect(fs.stat(oldNested.path)).rejects.toThrow();
       await expect(fs.stat(oldFlat.path)).rejects.toThrow();
       const freshStat = await fs.stat(freshNested.path);
       expect(freshStat.isFile()).toBe(true);
+      await expect(fs.stat(path.dirname(oldNested.path))).rejects.toThrow();
     });
   });
+
+  it("keeps nested remote-cache files during shallow cleanup", async () => {
+    await withTempStore(async (store) => {
+      const nested = await store.saveMediaBuffer(
+        Buffer.from("old nested"),
+        "text/plain",
+        path.join("remote-cache", "session-1", "images"),
+      );
+      const past = Date.now() - 10_000;
+      await fs.utimes(nested.path, past / 1000, past / 1000);
+
+      await store.cleanOldMedia(1_000);
+
+      const stat = await fs.stat(nested.path);
+      expect(stat.isFile()).toBe(true);
+    });
+  });
+
+  it("prunes empty directory chains after recursive cleanup", async () => {
+    await withTempStore(async (store) => {
+      const nested = await store.saveMediaBuffer(
+        Buffer.from("old nested"),
+        "text/plain",
+        path.join("remote-cache", "session-prune", "images"),
+      );
+      const mediaDir = await store.ensureMediaDir();
+      const sessionDir = path.dirname(path.dirname(nested.path));
+      const remoteCacheDir = path.dirname(sessionDir);
+      const past = Date.now() - 10_000;
+      await fs.utimes(nested.path, past / 1000, past / 1000);
+
+      await store.cleanOldMedia(1_000, { recursive: true, pruneEmptyDirs: true });
+
+      await expect(fs.stat(sessionDir)).rejects.toThrow();
+      const remoteCacheStat = await fs.stat(remoteCacheDir);
+      const mediaStat = await fs.stat(mediaDir);
+      expect(remoteCacheStat.isDirectory()).toBe(true);
+      expect(mediaStat.isDirectory()).toBe(true);
+    });
+  });
+
+  it.runIf(process.platform !== "win32")(
+    "does not follow symlinked top-level directories during recursive cleanup",
+    async () => {
+      await withTempStore(async (store, home) => {
+        const mediaDir = await store.ensureMediaDir();
+        const outsideDir = path.join(home, "outside-media");
+        const outsideFile = path.join(outsideDir, "old.txt");
+        const symlinkPath = path.join(mediaDir, "linked-dir");
+        await fs.mkdir(outsideDir, { recursive: true });
+        await fs.writeFile(outsideFile, "outside");
+        const past = Date.now() - 10_000;
+        await fs.utimes(outsideFile, past / 1000, past / 1000);
+        await fs.symlink(outsideDir, symlinkPath);
+
+        await store.cleanOldMedia(1_000, { recursive: true, pruneEmptyDirs: true });
+
+        const outsideStat = await fs.stat(outsideFile);
+        const symlinkStat = await fs.lstat(symlinkPath);
+        expect(outsideStat.isFile()).toBe(true);
+        expect(symlinkStat.isSymbolicLink()).toBe(true);
+      });
+    },
+  );
 
   it("sets correct mime for xlsx by extension", async () => {
     await withTempStore(async (store, home) => {

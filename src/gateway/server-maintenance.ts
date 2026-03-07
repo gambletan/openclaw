@@ -132,15 +132,29 @@ export function startGatewayMaintenanceTimers(params: {
     }
   }, 60_000);
 
+  let mediaCleanupInFlight: Promise<void> | null = null;
+  const runMediaCleanup = () => {
+    if (mediaCleanupInFlight) {
+      return mediaCleanupInFlight;
+    }
+    mediaCleanupInFlight = cleanOldMedia(params.mediaCleanupTtlMs, {
+      recursive: true,
+      pruneEmptyDirs: true,
+    })
+      .catch((err) => {
+        params.logHealth.error(`media cleanup failed: ${formatError(err)}`);
+      })
+      .finally(() => {
+        mediaCleanupInFlight = null;
+      });
+    return mediaCleanupInFlight;
+  };
+
   const mediaCleanup = setInterval(() => {
-    void cleanOldMedia(params.mediaCleanupTtlMs).catch((err) =>
-      params.logHealth.error(`media cleanup failed: ${formatError(err)}`),
-    );
+    void runMediaCleanup();
   }, 60 * 60_000);
 
-  void cleanOldMedia(params.mediaCleanupTtlMs).catch((err) =>
-    params.logHealth.error(`initial media cleanup failed: ${formatError(err)}`),
-  );
+  void runMediaCleanup();
 
   return { tickInterval, healthInterval, dedupeCleanup, mediaCleanup };
 }

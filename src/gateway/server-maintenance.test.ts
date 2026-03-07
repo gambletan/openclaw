@@ -39,11 +39,67 @@ describe("startGatewayMaintenanceTimers", () => {
       mediaCleanupTtlMs: 24 * 60 * 60_000,
     });
 
-    expect(cleanOldMediaMock).toHaveBeenCalledWith(24 * 60 * 60_000);
+    expect(cleanOldMediaMock).toHaveBeenCalledWith(24 * 60 * 60_000, {
+      recursive: true,
+      pruneEmptyDirs: true,
+    });
 
     cleanOldMediaMock.mockClear();
     await vi.advanceTimersByTimeAsync(60 * 60_000);
-    expect(cleanOldMediaMock).toHaveBeenCalledWith(24 * 60 * 60_000);
+    expect(cleanOldMediaMock).toHaveBeenCalledWith(24 * 60 * 60_000, {
+      recursive: true,
+      pruneEmptyDirs: true,
+    });
+
+    clearInterval(timers.tickInterval);
+    clearInterval(timers.healthInterval);
+    clearInterval(timers.dedupeCleanup);
+    clearInterval(timers.mediaCleanup);
+  });
+
+  it("skips overlapping media cleanup runs", async () => {
+    vi.useFakeTimers();
+    let resolveCleanup = () => {};
+    let cleanupReady = false;
+    cleanOldMediaMock.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveCleanup = resolve;
+          cleanupReady = true;
+        }),
+    );
+    const { startGatewayMaintenanceTimers } = await import("./server-maintenance.js");
+
+    const timers = startGatewayMaintenanceTimers({
+      broadcast: () => {},
+      nodeSendToAllSubscribed: () => {},
+      getPresenceVersion: () => 1,
+      getHealthVersion: () => 1,
+      refreshGatewayHealthSnapshot: async () => ({ ok: true }) as HealthSummary,
+      logHealth: { error: () => {} },
+      dedupe: new Map(),
+      chatAbortControllers: new Map(),
+      chatRunState: { abortedRuns: new Map() },
+      chatRunBuffers: new Map(),
+      chatDeltaSentAt: new Map(),
+      removeChatRun: () => undefined,
+      agentRunSeq: new Map(),
+      nodeSendToSession: () => {},
+      mediaCleanupTtlMs: 24 * 60 * 60_000,
+    });
+
+    expect(cleanOldMediaMock).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(60 * 60_000);
+    expect(cleanOldMediaMock).toHaveBeenCalledTimes(1);
+
+    if (cleanupReady) {
+      resolveCleanup();
+    }
+    await Promise.resolve();
+
+    await vi.advanceTimersByTimeAsync(60 * 60_000);
+    expect(cleanOldMediaMock).toHaveBeenCalledTimes(2);
 
     clearInterval(timers.tickInterval);
     clearInterval(timers.healthInterval);

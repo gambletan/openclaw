@@ -17,6 +17,10 @@ const DEFAULT_TTL_MS = 2 * 60 * 1000; // 2 minutes
 // Files are intentionally readable by non-owner UIDs so Docker sandbox containers can access
 // inbound media. The containing state/media directories remain 0o700, which is the trust boundary.
 const MEDIA_FILE_MODE = 0o644;
+type CleanOldMediaOptions = {
+  recursive?: boolean;
+  pruneEmptyDirs?: boolean;
+};
 type RequestImpl = typeof httpRequest;
 type ResolvePinnedHostnameImpl = typeof resolvePinnedHostname;
 
@@ -88,50 +92,64 @@ export async function ensureMediaDir() {
   return mediaDir;
 }
 
-export async function cleanOldMedia(ttlMs = DEFAULT_TTL_MS) {
+export async function cleanOldMedia(ttlMs = DEFAULT_TTL_MS, options: CleanOldMediaOptions = {}) {
   const mediaDir = await ensureMediaDir();
   const now = Date.now();
+  const recursive = options.recursive ?? false;
+  const pruneEmptyDirs = recursive && (options.pruneEmptyDirs ?? false);
 
-  const removeExpiredFilesRecursively = async (dir: string): Promise<void> => {
-    const dirEntries = await fs.readdir(dir).catch(() => []);
-    await Promise.all(
-      dirEntries.map(async (entry) => {
-        const fullPath = path.join(dir, entry);
-        const stat = await fs.lstat(fullPath).catch(() => null);
-        if (!stat) {
-          return;
+  const removeExpiredFilesInDir = async (dir: string): Promise<boolean> => {
+    const dirEntries = await fs.readdir(dir).catch(() => null);
+    if (!dirEntries) {
+      return false;
+    }
+    for (const entry of dirEntries) {
+      const fullPath = path.join(dir, entry);
+      const stat = await fs.lstat(fullPath).catch(() => null);
+      if (!stat || stat.isSymbolicLink()) {
+        continue;
+      }
+      if (stat.isDirectory()) {
+        if (recursive) {
+          const childIsEmpty = await removeExpiredFilesInDir(fullPath);
+          if (childIsEmpty) {
+            await fs.rmdir(fullPath).catch(() => {});
+          }
         }
-        if (stat.isDirectory() && !stat.isSymbolicLink()) {
-          await removeExpiredFilesRecursively(fullPath);
-          return;
-        }
-        if (!stat.isFile()) {
-          return;
-        }
-        if (now - stat.mtimeMs > ttlMs) {
-          await fs.rm(fullPath).catch(() => {});
-        }
-      }),
-    );
+        continue;
+      }
+      if (!stat.isFile()) {
+        continue;
+      }
+      if (now - stat.mtimeMs > ttlMs) {
+        await fs.rm(fullPath, { force: true }).catch(() => {});
+      }
+    }
+    if (!pruneEmptyDirs) {
+      return false;
+    }
+    const remainingEntries = await fs.readdir(dir).catch(() => null);
+    return remainingEntries !== null && remainingEntries.length === 0;
   };
 
   const entries = await fs.readdir(mediaDir).catch(() => []);
-  await Promise.all(
-    entries.map(async (file) => {
-      const full = path.join(mediaDir, file);
-      const stat = await fs.stat(full).catch(() => null);
-      if (!stat) {
-        return;
+  for (const file of entries) {
+    const full = path.join(mediaDir, file);
+    const stat = await fs.lstat(full).catch(() => null);
+    if (!stat || stat.isSymbolicLink()) {
+      continue;
+    }
+    if (stat.isDirectory()) {
+      const dirIsEmpty = await removeExpiredFilesInDir(full);
+      if (dirIsEmpty) {
+        await fs.rmdir(full).catch(() => {});
       }
-      if (stat.isDirectory()) {
-        await removeExpiredFilesRecursively(full);
-        return;
-      }
-      if (stat.isFile() && now - stat.mtimeMs > ttlMs) {
-        await fs.rm(full).catch(() => {});
-      }
-    }),
-  );
+      continue;
+    }
+    if (stat.isFile() && now - stat.mtimeMs > ttlMs) {
+      await fs.rm(full, { force: true }).catch(() => {});
+    }
+  }
 }
 
 function looksLikeUrl(src: string) {
@@ -272,7 +290,7 @@ export async function saveMediaSource(
   const baseDir = resolveMediaDir();
   const dir = subdir ? path.join(baseDir, subdir) : baseDir;
   await fs.mkdir(dir, { recursive: true, mode: 0o700 });
-  await cleanOldMedia();
+  await cleanOldMedia(DEFAULT_TTL_MS, { recursive: false });
   const baseId = crypto.randomUUID();
   if (looksLikeUrl(source)) {
     const tempDest = path.join(dir, `${baseId}.tmp`);

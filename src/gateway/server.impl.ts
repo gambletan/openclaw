@@ -119,6 +119,21 @@ export { __resetModelCatalogCacheForTest } from "./server-model-catalog.js";
 
 ensureOpenClawCliOnPath();
 
+const DEFAULT_MEDIA_TTL_HOURS = 24;
+const MAX_MEDIA_TTL_HOURS = 24 * 7;
+
+function resolveMediaCleanupTtlMs(ttlHoursRaw: number | undefined): number {
+  const ttlHours = Math.min(
+    Math.max(ttlHoursRaw ?? DEFAULT_MEDIA_TTL_HOURS, 1),
+    MAX_MEDIA_TTL_HOURS,
+  );
+  const ttlMs = ttlHours * 60 * 60_000;
+  if (!Number.isFinite(ttlMs) || !Number.isSafeInteger(ttlMs)) {
+    throw new Error(`Invalid media.ttlHours: ${String(ttlHoursRaw)}`);
+  }
+  return ttlMs;
+}
+
 const log = createSubsystemLogger("gateway");
 const logCanvas = log.child("canvas");
 const logDiscovery = log.child("discovery");
@@ -697,7 +712,7 @@ export async function startGatewayServer(
       removeChatRun,
       agentRunSeq,
       nodeSendToSession,
-      mediaCleanupTtlMs: (cfgAtStart.media?.ttlHours ?? 24) * 60 * 60_000,
+      mediaCleanupTtlMs: resolveMediaCleanupTtlMs(cfgAtStart.media?.ttlHours),
     }));
   }
 
