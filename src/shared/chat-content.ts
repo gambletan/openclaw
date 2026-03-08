@@ -19,7 +19,7 @@ export function extractTextFromChatContent(
           Array.isArray(parsed) &&
           parsed.length > 0 &&
           parsed.every(
-            (item) => item && typeof item === "object" && "type" in item && "text" in item,
+            (item) => item && typeof item === "object" && "type" in item,
           )
         ) {
           return extractTextFromChatContent(parsed, opts);

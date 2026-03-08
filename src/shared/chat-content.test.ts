@@ -55,6 +55,15 @@ describe("extractTextFromChatContent", () => {
     expect(extractTextFromChatContent(content)).toBe('[{"foo":"bar"}]');
   });
 
+  it("extracts text from a JSON-stringified mixed-content array (text + image blocks)", () => {
+    const blocks = [
+      { type: "image_url", image_url: { url: "https://example.com/img.png" } },
+      { type: "text", text: "hello" },
+    ];
+    const content = JSON.stringify(blocks);
+    expect(extractTextFromChatContent(content)).toBe("hello");
+  });
+
   it("applies sanitizeText to JSON-stringified content blocks", () => {
     const blocks = [{ type: "text", text: "hello <b>world</b>" }];
     const content = JSON.stringify(blocks);
