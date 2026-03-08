@@ -1,3 +1,4 @@
+import type { ChannelGroupConfig } from "./group-policy.js";
 import type { CommonChannelMessagingConfig } from "./types.channel-messaging-common.js";
 
 export type SignalReactionNotificationMode = "off" | "own" | "all" | "allowlist";
@@ -24,6 +25,8 @@ export type SignalAccountConfig = CommonChannelMessagingConfig & {
   ignoreAttachments?: boolean;
   ignoreStories?: boolean;
   sendReadReceipts?: boolean;
+  /** Per-group config (e.g. requireMention, tools). Keys are group IDs or "*" for default. */
+  groups?: Record<string, ChannelGroupConfig>;
   /** Outbound text chunk size (chars). Default: 4000. */
   textChunkLimit?: number;
   /** Reaction notification mode (off|own|all|allowlist). Default: own. */
