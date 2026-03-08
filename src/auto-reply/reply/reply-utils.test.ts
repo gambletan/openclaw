@@ -141,6 +141,26 @@ describe("normalizeReplyPayload", () => {
     expect(reasons).toEqual(["silent"]);
   });
 
+  it("suppresses JSON-wrapped NO_REPLY (#37727)", () => {
+    const reasons: string[] = [];
+    const result = normalizeReplyPayload(
+      { text: '{"action":"NO_REPLY"}' },
+      { onSkip: (reason) => reasons.push(reason) },
+    );
+    expect(result).toBeNull();
+    expect(reasons).toEqual(["silent"]);
+  });
+
+  it("clears JSON-wrapped NO_REPLY text but keeps media", () => {
+    const result = normalizeReplyPayload({
+      text: '{"action":"NO_REPLY"}',
+      mediaUrl: "https://example.com/img.png",
+    });
+    expect(result).not.toBeNull();
+    expect(result!.text).toBe("");
+    expect(result!.mediaUrl).toBe("https://example.com/img.png");
+  });
+
   it("strips NO_REPLY but keeps media payload", () => {
     const result = normalizeReplyPayload({
       text: "NO_REPLY",

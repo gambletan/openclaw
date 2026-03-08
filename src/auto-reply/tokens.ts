@@ -49,6 +49,40 @@ export function stripSilentToken(text: string, token: string = SILENT_REPLY_TOKE
   return text.replace(getSilentTrailingRegex(token), "").trim();
 }
 
+/**
+ * Detect JSON-wrapped silent token payloads that LLMs sometimes emit instead
+ * of the bare token string.  Matches patterns like:
+ *   `{"action":"NO_REPLY"}`
+ *   `{ "action" : "NO_REPLY" }`
+ *   `{"type":"NO_REPLY"}`
+ * The text must be *only* a compact JSON object whose sole meaningful value
+ * equals the silent token; surrounding whitespace is tolerated.
+ */
+export function isJsonWrappedSilentToken(
+  text: string | undefined,
+  token: string = SILENT_REPLY_TOKEN,
+): boolean {
+  if (!text) {
+    return false;
+  }
+  const trimmed = text.trim();
+  if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) {
+    return false;
+  }
+  try {
+    const parsed: unknown = JSON.parse(trimmed);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      return false;
+    }
+    const values = Object.values(parsed as Record<string, unknown>);
+    // All string values must be the silent token; at least one must be present.
+    const stringValues = values.filter((v): v is string => typeof v === "string");
+    return stringValues.length > 0 && stringValues.every((v) => v === token);
+  } catch {
+    return false;
+  }
+}
+
 export function isSilentReplyPrefixText(
   text: string | undefined,
   token: string = SILENT_REPLY_TOKEN,

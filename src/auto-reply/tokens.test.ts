@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { isSilentReplyPrefixText, isSilentReplyText, stripSilentToken } from "./tokens.js";
+import {
+  isJsonWrappedSilentToken,
+  isSilentReplyPrefixText,
+  isSilentReplyText,
+  stripSilentToken,
+} from "./tokens.js";
 
 describe("isSilentReplyText", () => {
   it("returns true for exact token", () => {
@@ -70,6 +75,54 @@ describe("stripSilentToken", () => {
 
   it("works with custom token", () => {
     expect(stripSilentToken("done HEARTBEAT_OK", "HEARTBEAT_OK")).toBe("done");
+  });
+});
+
+describe("isJsonWrappedSilentToken", () => {
+  it("detects action-wrapped NO_REPLY (#37727)", () => {
+    expect(isJsonWrappedSilentToken('{"action":"NO_REPLY"}')).toBe(true);
+  });
+
+  it("detects type-wrapped NO_REPLY", () => {
+    expect(isJsonWrappedSilentToken('{"type":"NO_REPLY"}')).toBe(true);
+  });
+
+  it("tolerates whitespace inside JSON", () => {
+    expect(isJsonWrappedSilentToken('{ "action" : "NO_REPLY" }')).toBe(true);
+  });
+
+  it("tolerates surrounding whitespace", () => {
+    expect(isJsonWrappedSilentToken('  {"action":"NO_REPLY"}  ')).toBe(true);
+  });
+
+  it("returns false for undefined/empty", () => {
+    expect(isJsonWrappedSilentToken(undefined)).toBe(false);
+    expect(isJsonWrappedSilentToken("")).toBe(false);
+  });
+
+  it("returns false for bare token", () => {
+    expect(isJsonWrappedSilentToken("NO_REPLY")).toBe(false);
+  });
+
+  it("returns false for non-token JSON", () => {
+    expect(isJsonWrappedSilentToken('{"action":"reply"}')).toBe(false);
+  });
+
+  it("returns false for JSON with mixed values", () => {
+    expect(isJsonWrappedSilentToken('{"action":"NO_REPLY","text":"hello"}')).toBe(false);
+  });
+
+  it("returns false for arrays", () => {
+    expect(isJsonWrappedSilentToken('["NO_REPLY"]')).toBe(false);
+  });
+
+  it("returns false for invalid JSON", () => {
+    expect(isJsonWrappedSilentToken("{action: NO_REPLY}")).toBe(false);
+  });
+
+  it("works with custom token", () => {
+    expect(isJsonWrappedSilentToken('{"action":"HEARTBEAT_OK"}', "HEARTBEAT_OK")).toBe(true);
+    expect(isJsonWrappedSilentToken('{"action":"NO_REPLY"}', "HEARTBEAT_OK")).toBe(false);
   });
 });
 

@@ -2,6 +2,7 @@ import { sanitizeUserFacingText } from "../../agents/pi-embedded-helpers.js";
 import { stripHeartbeatToken } from "../heartbeat.js";
 import {
   HEARTBEAT_TOKEN,
+  isJsonWrappedSilentToken,
   isSilentReplyText,
   SILENT_REPLY_TOKEN,
   stripSilentToken,
@@ -42,6 +43,15 @@ export function normalizeReplyPayload(
   const silentToken = opts.silentToken ?? SILENT_REPLY_TOKEN;
   let text = payload.text ?? undefined;
   if (text && isSilentReplyText(text, silentToken)) {
+    if (!hasMedia && !hasChannelData) {
+      opts.onSkip?.("silent");
+      return null;
+    }
+    text = "";
+  }
+  // Detect JSON-wrapped silent token (e.g. {"action":"NO_REPLY"}) which some
+  // models emit instead of the bare token.  Treat as silent.  (#37727)
+  if (text && isJsonWrappedSilentToken(text, silentToken)) {
     if (!hasMedia && !hasChannelData) {
       opts.onSkip?.("silent");
       return null;
